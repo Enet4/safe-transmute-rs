@@ -44,7 +44,7 @@ pub fn bytes_are_bool(v: &[u8]) -> bool {
 /// ```
 pub fn guarded_transmute_bool_permissive(bytes: &[u8]) -> Result<&[bool], Error> {
     check_bool(bytes)?;
-    unsafe { Ok(guarded_transmute_many_permissive(bytes)) }
+    unsafe { guarded_transmute_many_permissive(bytes) }
 }
 
 /// View a byte slice as a slice of boolean values.
@@ -89,7 +89,7 @@ pub fn guarded_transmute_bool_pedantic(bytes: &[u8]) -> Result<&[bool], Error> {
 /// ```
 pub fn guarded_transmute_bool_vec_permissive(bytes: Vec<u8>) -> Result<Vec<bool>, Error> {
     check_bool(&bytes)?;
-    unsafe { Ok(guarded_transmute_vec_permissive(bytes)) }
+    unsafe { guarded_transmute_vec_permissive(bytes) }
 }
 
 /// Transform a byte vector into a vector of bool.

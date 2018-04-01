@@ -43,3 +43,80 @@ pub fn designalise_f64(f: f64) -> f64 {
 
     unsafe { transmute(f) }
 }
+
+/// Check whether the slice is properly aligned in memory for reading
+/// a `T`.
+pub(crate) fn check_align<T>(v: &[u8]) -> Result<(), super::error::Error> {
+    let align_offset = v.as_ptr() as usize % ::std::mem::align_of::<T>();
+    if align_offset != 0 {
+        return Err(super::error::Error::Unaligned{ offset: ::std::mem::align_of::<T>() - align_offset});
+    }
+    Ok(())
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::super::error::Error::Unaligned;
+    use super::super::to_bytes::guarded_transmute_to_bytes_many;
+    use super::check_align;
+    use std::ptr;
+
+    #[cfg(target_endian = "little")]
+    #[test]
+    fn test_check_align() {
+        // this is 4-byte aligned
+        let data: &[u32] = &[0x000a0005];
+        
+        let v: &[u8] = unsafe { guarded_transmute_to_bytes_many(data) };
+        check_align::<u16>(v).expect("aligned");
+        // it's safe to read
+        assert_eq!(unsafe { ptr::read(v.as_ptr() as *const u16) }, 5);
+        
+        let v2 = &v[1..];
+        assert_eq!(check_align::<u16>(v2), Err(Unaligned{ offset: 1}));
+        // must use `read_unaligned` here or it's UB
+        assert_eq!(unsafe { ptr::read_unaligned(v2.as_ptr() as *const u16) }, 2560);
+
+        check_align::<u32>(v).expect("aligned");
+        // also safe to read
+        assert_eq!(unsafe { ptr::read(v.as_ptr() as *const u32) }, 0x000a0005);
+
+        let v3 = &v[1..];
+        assert_eq!(check_align::<u32>(v3), Err(Unaligned{ offset: 3}));
+        // not safe to read in any way (out of bounds)
+
+        let v4 = &v[4..];
+        check_align::<u32>(v4).expect("aligned");
+        // aligned but not safe to read (out of bounds)
+    }
+
+    #[cfg(target_endian = "big")]
+    #[test]
+    fn test_check_align() {
+        // this is 4-byte aligned
+        let data: &[u32] = &[0x000a0005];
+        
+        let v: &[u8] = unsafe { guarded_transmute_to_bytes_many(data) };
+        check_align::<u16>(v).expect("aligned");
+        // it's safe to read
+        assert_eq!(unsafe { ptr::read(v.as_ptr() as *const u16) }, 10);
+        
+        let v2 = &v[1..];
+        assert_eq!(check_align::<u16>(v2), Err(Unaligned{ offset: 1}));
+        // must use `read_unaligned` here or it's UB
+        assert_eq!(unsafe { ptr::read_unaligned(v2.as_ptr() as *const u16) }, 2560);
+
+        check_align::<u32>(v).expect("aligned");
+        // also safe to read
+        assert_eq!(unsafe { ptr::read(v.as_ptr() as *const u32) }, 0x000a0005);
+
+        let v3 = &v[1..];
+        assert_eq!(check_align::<u32>(v3), Err(Unaligned{ offset: 3}));
+        // not safe to read in any way (out of bounds)
+
+        let v4 = &v[4..];
+        check_align::<u32>(v4).expect("aligned");
+        // aligned but not safe to read (out of bounds)
+    }
+}

@@ -91,6 +91,7 @@ mod to_bytes;
 use std::slice;
 use std::mem::{size_of, forget};
 use guard::{SingleValueGuard, PermissiveGuard, SingleManyGuard, PedanticGuard, Guard};
+use util::check_align;
 
 pub mod util;
 pub mod guard;
@@ -125,6 +126,7 @@ pub use self::bool::{guarded_transmute_bool_vec_permissive, guarded_transmute_bo
 /// # }
 /// ```
 pub unsafe fn guarded_transmute<T: Copy>(bytes: &[u8]) -> Result<T, Error> {
+    check_align::<T>(bytes)?;
     SingleManyGuard::check::<T>(bytes)?;
     Ok(slice::from_raw_parts(bytes.as_ptr() as *const T, 1)[0])
 }
@@ -149,6 +151,7 @@ pub unsafe fn guarded_transmute<T: Copy>(bytes: &[u8]) -> Result<T, Error> {
 /// # }
 /// ```
 pub unsafe fn guarded_transmute_pedantic<T: Copy>(bytes: &[u8]) -> Result<T, Error> {
+    check_align::<T>(bytes)?;
     SingleValueGuard::check::<T>(bytes)?;
     Ok(slice::from_raw_parts(bytes.as_ptr() as *const T, 1)[0])
 }
@@ -175,6 +178,7 @@ pub unsafe fn guarded_transmute_pedantic<T: Copy>(bytes: &[u8]) -> Result<T, Err
 /// # }
 /// ```
 pub unsafe fn guarded_transmute_many<T>(bytes: &[u8]) -> Result<&[T], Error> {
+    check_align::<T>(bytes)?;
     SingleManyGuard::check::<T>(bytes)?;
     Ok(slice::from_raw_parts(bytes.as_ptr() as *const T, bytes.len() / size_of::<T>()))
 }
@@ -188,12 +192,13 @@ pub unsafe fn guarded_transmute_many<T>(bytes: &[u8]) -> Result<&[T], Error> {
 /// ```
 /// # use safe_transmute::guarded_transmute_many_permissive;
 /// # unsafe {
-/// assert_eq!(guarded_transmute_many_permissive::<u16>(&[0x00]), &[]);
+/// assert_eq!(guarded_transmute_many_permissive::<u16>(&[0x00]).unwrap(), &[]);
 /// # }
 /// ```
-pub unsafe fn guarded_transmute_many_permissive<T>(bytes: &[u8]) -> &[T] {
-    PermissiveGuard::check::<T>(bytes).unwrap();
-    slice::from_raw_parts(bytes.as_ptr() as *const T, bytes.len() / size_of::<T>())
+pub unsafe fn guarded_transmute_many_permissive<T>(bytes: &[u8]) -> Result<&[T], Error> {
+    check_align::<T>(bytes)?;
+    PermissiveGuard::check::<T>(bytes)?;
+    Ok(slice::from_raw_parts(bytes.as_ptr() as *const T, bytes.len() / size_of::<T>()))
 }
 
 /// View a byte slice as a slice of an arbitrary type.
@@ -218,6 +223,7 @@ pub unsafe fn guarded_transmute_many_permissive<T>(bytes: &[u8]) -> &[T] {
 /// # }
 /// ```
 pub unsafe fn guarded_transmute_many_pedantic<T>(bytes: &[u8]) -> Result<&[T], Error> {
+    check_align::<T>(bytes)?;
     PedanticGuard::check::<T>(bytes)?;
     Ok(slice::from_raw_parts(bytes.as_ptr() as *const T, bytes.len() / size_of::<T>()))
 }
@@ -252,8 +258,9 @@ pub unsafe fn guarded_transmute_many_pedantic<T>(bytes: &[u8]) -> Result<&[T], E
 /// # }
 /// ```
 pub unsafe fn guarded_transmute_vec<T>(bytes: Vec<u8>) -> Result<Vec<T>, Error> {
+    check_align::<T>(&bytes)?;
     SingleManyGuard::check::<T>(&bytes)?;
-    Ok(guarded_transmute_vec_permissive(bytes))
+    guarded_transmute_vec_permissive(bytes)
 }
 
 /// Trasform a byte vector into a vector of an arbitrary type.
@@ -271,26 +278,27 @@ pub unsafe fn guarded_transmute_vec<T>(bytes: Vec<u8>) -> Result<Vec<T>, Error> 
 /// // Little-endian
 /// # unsafe {
 /// # /*
-/// assert_eq!(guarded_transmute_vec_permissive::<u16>(vec![0x00, 0x01, 0x00, 0x02]),
+/// assert_eq!(guarded_transmute_vec_permissive::<u16>(vec![0x00, 0x01, 0x00, 0x02]).unwrap(),
 /// # */
-/// # assert_eq!(guarded_transmute_vec_permissive::<u16>(vec![0x00, 0x01, 0x00, 0x02].le_to_native::<u16>()),
+/// # assert_eq!(guarded_transmute_vec_permissive::<u16>(vec![0x00, 0x01, 0x00, 0x02].le_to_native::<u16>()).unwrap(),
 ///            vec![0x0100, 0x0200]);
 /// # /*
-/// assert_eq!(guarded_transmute_vec_permissive::<u32>(vec![0x04, 0x00, 0x00, 0x00, 0xED]),
+/// assert_eq!(guarded_transmute_vec_permissive::<u32>(vec![0x04, 0x00, 0x00, 0x00, 0xED]).unwrap(),
 /// # */
-/// # assert_eq!(guarded_transmute_vec_permissive::<u32>(vec![0x04, 0x00, 0x00, 0x00, 0xED].le_to_native::<u32>()),
+/// # assert_eq!(guarded_transmute_vec_permissive::<u32>(vec![0x04, 0x00, 0x00, 0x00, 0xED].le_to_native::<u32>()).unwrap(),
 ///            vec![0x00000004]);
-/// assert_eq!(guarded_transmute_vec_permissive::<u16>(vec![0xED]), vec![]);
+/// assert_eq!(guarded_transmute_vec_permissive::<u16>(vec![0xED]).unwrap(), vec![]);
 /// # }
 /// # }
 /// ```
-pub unsafe fn guarded_transmute_vec_permissive<T>(mut bytes: Vec<u8>) -> Vec<T> {
-    PermissiveGuard::check::<T>(&bytes).unwrap();
+pub unsafe fn guarded_transmute_vec_permissive<T>(mut bytes: Vec<u8>) -> Result<Vec<T>, Error> {
+    check_align::<T>(&bytes)?;
+    PermissiveGuard::check::<T>(&bytes)?;
     let ptr = bytes.as_mut_ptr();
     let capacity = bytes.capacity() / size_of::<T>();
     let len = bytes.len() / size_of::<T>();
     forget(bytes);
-    Vec::from_raw_parts(ptr as *mut T, capacity, len)
+    Ok(Vec::from_raw_parts(ptr as *mut T, capacity, len))
 }
 
 /// Trasform a byte vector into a vector of an arbitrary type.
@@ -317,6 +325,7 @@ pub unsafe fn guarded_transmute_vec_permissive<T>(mut bytes: Vec<u8>) -> Vec<T> 
 /// # }
 /// ```
 pub unsafe fn guarded_transmute_vec_pedantic<T>(bytes: Vec<u8>) -> Result<Vec<T>, Error> {
+    check_align::<T>(&bytes)?;
     PedanticGuard::check::<T>(&bytes)?;
-    Ok(guarded_transmute_vec_permissive(bytes))
+    guarded_transmute_vec_permissive(bytes)
 }
