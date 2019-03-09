@@ -249,3 +249,26 @@ pub fn transmute_to_bytes_vec<T>(mut from: Vec<T>) -> Vec<u8> {
 pub fn guarded_transmute_to_bytes_pod_vec<T: PodTransmutable>(from: Vec<T>) -> Vec<u8> {
     transmute_to_bytes_vec(from)
 }
+
+#[cfg(test)]
+mod tests {
+    #[cfg(feature = "std")]
+    use super::transmute_to_bytes_vec;
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn high_align_dealloc_issue_16() {
+        #[repr(C)]
+        #[repr(align(32))]
+        #[derive(Copy, Clone)]
+        struct Test {
+            value: [u8; 32],
+        }
+
+        let values = vec![Test { value: [42; 32] }; 1000];
+        let bytes = transmute_to_bytes_vec(values);
+
+        assert_eq!(bytes.len(), 32_000);
+        assert!(bytes.iter().all(|&v| v == 42));
+    }
+}
