@@ -1,6 +1,7 @@
 sudo: false
 language: generic
 cache: cargo
+os: linux
 
 matrix:
   include:
@@ -18,6 +19,10 @@ matrix:
       rust: stable
       services: docker
       sudo: required
+    - env: LANGUAGE=Rust
+      os: windows
+      language: rust
+      rust: stable
     - env: LANGUAGE=Rust CARGO_DEFAULT_FEATURES=--no-default-features
       language: rust
       rust: stable
